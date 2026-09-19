@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jev X Sentiment Analysis — Crypto Market & Social Intelligence Terminal</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="terminal-container">
+        <!-- Top Navigation -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="logo-badge">J</div>
+                <div class="brand-text">
+                    <span class="brand-title">Jev X Sentiment Analysis</span>
+                    <span class="brand-subtitle">Powered by TypeSafe Jev System One</span>
+                </div>
+            </div>
+
+            <div class="nav-status">
+                <div class="status-pill {% if has_typesafe_key %}status-active{% else %}status-warning{% endif %}"
+                    id="typesafe-status">
+                    <span class="status-dot"></span>
+                    <span id="typesafe-status-text">TypeSafe AI: {% if has_typesafe_key %}Live{% else %}Demo Mode{%
+                        endif %}</span>
+                </div>
+                <div class="status-pill {% if has_twitter_key %}status-active{% else %}status-warning{% endif %}"
+                    id="twitter-status">
+                    <span class="status-dot"></span>
+                    <span id="twitter-status-text">TwitterAPI: {% if has_twitter_key %}Connected{% else %}Simulated{%
+                        endif %}</span>
+                </div>
+                <button class="settings-btn" id="open-settings-btn" title="Configure API Keys">
+                    ⚙️ Add API Keys
+                </button>
+            </div>
+        </header>
+
+        <!-- API Settings Modal -->
+        <div class="modal-overlay hidden" id="settings-modal">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Configure API Keys (Go Live)</h3>
+                    <button class="close-modal-btn" id="close-settings-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">
+                        Enter your API keys to switch from demo simulation to live TypeSafe Jev System One reasoning and
+                        real-time TwitterAPI.io tweet search.
+                    </p>
+
+                    <div class="form-group">
+                        <label for="typesafe-key-input">TypeSafe AI API Key</label>
+                        <input type="password" id="typesafe-key-input" placeholder="Paste key from console.typesafe.ai"
+                            autocomplete="off">
+                        <span class="form-hint">Get key from <a href="https://console.typesafe.ai"
+                                target="_blank">console.typesafe.ai</a></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="twitter-key-input">TwitterAPI.io API Key</label>
+                        <input type="password" id="twitter-key-input" placeholder="Paste key from twitterapi.io"
+                            autocomplete="off">
+                        <span class="form-hint">Get key from <a href="https://twitterapi.io"
+                                target="_blank">twitterapi.io</a></span>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="primary-btn" id="save-settings-btn">Save & Go Live</button>
+                        <button class="secondary-btn" id="cancel-settings-btn">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search & Control Strip -->
+        <section class="control-strip">
+            <div class="search-box">
+                <div class="input-wrapper">
+                    <span class="search-prefix">$</span>
+                    <input type="text" id="symbol-input" placeholder="Search asset (e.g. BTC, SOL, ETH)..." value="BTC"
+                        autocomplete="off" spellcheck="false">
+                </div>
+                <div class="quick-chips">
+                    <button class="chip active" data-symbol="BTC">BTC</button>
+                    <button class="chip" data-symbol="SOL">SOL</button>
+                    <button class="chip" data-symbol="ETH">ETH</button>
+                    <button class="chip" data-symbol="DOGE">DOGE</button>
+                    <button class="chip" data-symbol="SUI">SUI</button>
+                </div>
+            </div>
+
+            <div class="slider-box">
+                <div class="slider-label-row">
+                    <span class="slider-title">Social Depth:</span>
+                    <span class="slider-val" id="sample-size-val">100 Tweets</span>
+                    <span class="slider-cost" id="estimated-cost">(~$0.015)</span>
+                </div>
+                <input type="range" id="sample-size-slider" min="50" max="1000" step="50" value="100">
+                <div class="slider-ticks">
+                    <span>50</span>
+                    <span>250</span>
+                    <span>500</span>
+                    <span>1,000</span>
+                </div>
+            </div>
+
+            <button id="analyze-btn" class="primary-btn">
+                <span class="btn-text">Analyze Asset</span>
+                <div class="spinner hidden" id="loading-spinner"></div>
+            </button>
+        </section>
+
+        <!-- Market Ticker Ribbon -->
+        <section class="ticker-ribbon" id="ticker-ribbon">
+            <div class="ticker-item">
+                <span class="ticker-label">Asset</span>
+                <span class="ticker-val" id="ticker-symbol">BTC/USDT</span>
+            </div>
+            <div class="ticker-item">
+                <span class="ticker-label">Current Price</span>
+                <span class="ticker-val font-mono" id="ticker-price">--</span>
+            </div>
+            <div class="ticker-item">
+                <span class="ticker-label">24h Change</span>
+                <span class="ticker-val font-mono" id="ticker-change">--</span>
+            </div>
+            <div class="ticker-item">
+                <span class="ticker-label">Funding Rate</span>
+                <span class="ticker-val font-mono" id="ticker-funding">--</span>
+            </div>
+            <div class="ticker-item">
+                <span class="ticker-label">RSI (14)</span>
+                <span class="ticker-val font-mono" id="ticker-rsi">--</span>
+            </div>
+            <div class="ticker-item">
+                <span class="ticker-label">24h Volume</span>
+                <span class="ticker-val font-mono" id="ticker-vol">--</span>
+            </div>
+        </section>
+
+        <!-- Main Terminal Body -->
+        <main class="main-grid">
+            <!-- Left Column: Decision & Strategy Card -->
+            <div class="decision-col">
+                <!-- Decision Verdict Card -->
+                <div class="card decision-card" id="decision-card">
+                    <div class="card-header">
+                        <span class="card-tag">TypeSafe Jev System One Verdict</span>
+                        <span class="timestamp" id="decision-timestamp">Real-time</span>
+                    </div>
+
+                    <div class="decision-hero">
+                        <div class="badge-wrapper">
+                            <div class="action-badge badge-hold" id="action-badge">READY</div>
+                        </div>
+                        <div class="confidence-box">
+                            <span class="conf-num font-mono" id="confidence-val">--%</span>
+                            <span class="conf-label">Calibrated Confidence</span>
+                            <span class="conf-sub font-mono" id="conf-sub-text">Plurality across 6 signals</span>
+                        </div>
+                    </div>
+
+                    <!-- Signal Probability Distribution Breakdown -->
+                    <div class="distribution-box" id="distribution-box">
+                        <div class="dist-header">
+                            <span class="dist-title">Signal Probability Breakdown (100% Total)</span>
+                            <span class="dist-sub font-mono" id="dist-winner-note">Standby</span>
+                        </div>
+                        <div class="dist-bars" id="dist-bars-container">
+                            <div style="padding: 14px 0; font-size: 12px; color: var(--text-muted); text-align: center;">
+                                Click "Analyze Asset" to calculate full 6-way signal probability distribution.
+                            </div>
+                        </div>
+                        <div class="dist-footer" id="dist-footer">
+                            <div class="dist-footer-item">
+                                <span class="footer-label">Status:</span>
+                                <span class="footer-val font-mono text-muted">Awaiting analysis</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rationale-box" id="rationale-box">
+                        Select an asset above and click "Analyze Asset" to run real-time market microstructure & Twitter social sentiment analysis.
+                    </div>
+
+                    <!-- Actionable Trade Levels Box -->
+                    <div class="trade-levels-box">
+                        <div class="levels-header">
+                            <span>Calculated Trade Levels (Manual Execution)</span>
+                            <button class="copy-btn" id="copy-levels-btn" title="Copy to clipboard">
+                                📋 Copy Levels
+                            </button>
+                        </div>
+
+                        <div class="levels-grid">
+                            <div class="level-cell">
+                                <span class="cell-label">Entry Range</span>
+                                <span class="cell-val font-mono" id="lvl-entry">--</span>
+                            </div>
+                            <div class="level-cell">
+                                <span class="cell-label">Stop Loss</span>
+                                <span class="cell-val font-mono text-danger" id="lvl-sl">--</span>
+                            </div>
+                            <div class="level-cell">
+                                <span class="cell-label">Take Profit 1</span>
+                                <span class="cell-val font-mono text-success" id="lvl-tp1">--</span>
+                            </div>
+                            <div class="level-cell">
+                                <span class="cell-label">Take Profit 2</span>
+                                <span class="cell-val font-mono text-success" id="lvl-tp2">--</span>
+                            </div>
+                            <div class="level-cell full-width">
+                                <span class="cell-label">Risk/Reward Profile</span>
+                                <span class="cell-val font-mono" id="lvl-rr">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- External Exchange Quick Links -->
+                    <div class="exchange-links">
+                        <span class="links-title">Execute manually on:</span>
+                        <div class="link-buttons" id="exchange-links-row">
+                            <a href="https://www.binance.com" target="_blank" class="ext-link">Binance</a>
+                            <a href="https://www.bybit.com" target="_blank" class="ext-link">Bybit</a>
+                            <a href="https://www.coinbase.com" target="_blank" class="ext-link">Coinbase</a>
+                            <a href="https://jup.ag" target="_blank" class="ext-link">Jupiter DEX</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sentiment & Derivatives Radar Card -->
+                <div class="card metrics-card">
+                    <div class="card-header">
+                        <span class="card-tag">Social Sentiment & Squeeze Radar</span>
+                    </div>
+
+                    <div class="metrics-list">
+                        <div class="metric-row">
+                            <div class="metric-info">
+                                <span class="metric-name">Prevailing Social Mood</span>
+                                <span class="metric-sub" id="sentiment-sub">Based on analyzed tweets</span>
+                            </div>
+                            <span class="metric-value font-mono" id="sentiment-label-val">--</span>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-info">
+                                <span class="metric-name">Short Squeeze Risk (Noul)</span>
+                                <span class="metric-sub">Negative funding vs retail panic</span>
+                            </div>
+                            <span class="metric-value font-mono" id="squeeze-val">--%</span>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-info">
+                                <span class="metric-name">Author Diversity Ratio</span>
+                                <span class="metric-sub">Organic retail vs bot farms</span>
+                            </div>
+                            <span class="metric-value font-mono" id="diversity-val">--%</span>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-info">
+                                <span class="metric-name">Catalyst Impact Score</span>
+                                <span class="metric-sub">News significance (0 to 3 scale)</span>
+                            </div>
+                            <span class="metric-value font-mono" id="catalyst-val">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Tweet Intelligence Explorer -->
+            <div class="content-col">
+                <!-- Tweet Explorer Card -->
+                <div class="card tweets-card">
+                    <div class="card-header">
+                        <span class="card-tag">Live Tweet Intelligence Explorer</span>
+                        <span class="tweet-count-badge" id="tweet-count-badge">0 Tweets</span>
+                    </div>
+
+                    <div class="tweet-list" id="tweet-list">
+                        <div class="empty-state">
+                            No tweets loaded yet. Search an asset above to analyze recent social chatter.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script Controller -->
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>

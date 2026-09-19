@@ -1,0 +1,58 @@
+# Python bytecode & cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache
+
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+myenv/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Local SQLite databases & cache
+*.db
+*.sqlite
+*.sqlite3
+data/
+app/data/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs & code editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
