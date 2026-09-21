@@ -196,6 +196,11 @@
 
                     <!-- Actionable Trade Levels Box -->
                     <div class="trade-levels-box">
+                        <div class="fallback-banner" id="market-fallback-banner" hidden>
+                            <strong>No live price for this symbol.</strong>
+                            The exchange lookup failed, so the market block below is placeholder data.
+                            Trade levels are withheld: they would be arithmetic on a number that is not a price.
+                        </div>
                         <div class="levels-header">
                             <span>Calculated Trade Levels (Manual Execution)</span>
                             <button class="copy-btn" id="copy-levels-btn" title="Copy to clipboard">
