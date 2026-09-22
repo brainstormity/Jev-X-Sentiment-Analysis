@@ -21,7 +21,10 @@ class TypeSafeService:
         """
         sym = symbol.upper().replace("$", "")
         price = market_data.get("price", 100.0)
-        funding_rate = market_data.get("funding_rate_pct", 0.0)
+        funding_rate = market_data.get("funding_rate_pct")
+        open_interest_usd = market_data.get("open_interest_usd")
+        has_perpetuals = bool(market_data.get("has_perpetuals", False))
+        momentum_bucket = market_data.get("momentum_bucket", "neutral")
         rsi = market_data.get("rsi_14", 50.0)
         change_24h = market_data.get("change_24h_pct", 0.0)
         sample_size = social_stats.get("sample_size", 0)
@@ -32,8 +35,11 @@ class TypeSafeService:
             "market": {
                 "current_price": price,
                 "change_24h_pct": change_24h,
+                "momentum_bucket": momentum_bucket,
                 "rsi_14": rsi,
+                "has_perpetuals": has_perpetuals,
                 "funding_rate_pct": funding_rate,
+                "open_interest_usd": open_interest_usd,
                 "volume_24h_usd": market_data.get("volume_24h_usd", 0)
             },
             "social_stats": {
@@ -50,8 +56,8 @@ class TypeSafeService:
         questions = {
             "trade_action": Choice(
                 instructions=(
-                    "Given `market` data (RSI, price change, funding rate) and `social_stats` "
-                    "across `sample_size` tweets, what is the best immediate trading action for `asset`?"
+                    "Given `market` data (RSI, price change momentum, open interest, and perpetuals funding rate if present) "
+                    "and `social_stats` across `sample_size` tweets, what is the best immediate trading action for `asset`?"
                 ),
                 criteria={
                     "STRONG_BUY": "High-conviction long (e.g. short squeeze setup, capitulation bottom, or major verified breakout).",
@@ -74,8 +80,9 @@ class TypeSafeService:
             ),
             "is_short_squeeze_risk": Noul(
                 instructions=(
-                    "Does the state show negative `market.funding_rate_pct` clashing with "
-                    "`social_stats.sentiment_label` panic at support, indicating a short squeeze risk?"
+                    "If `market.has_perpetuals` is true, does the state show negative `market.funding_rate_pct` clashing with "
+                    "`social_stats.sentiment_label` panic at support, indicating a short squeeze risk? If perpetuals data is unavailable, "
+                    "does extreme oversold RSI clashing with peak panic indicate a potential capitulation bounce?"
                 )
             ),
             "catalyst_impact": Score(
@@ -149,7 +156,9 @@ class TypeSafeService:
 
         # Fallback if no API key or API call failed
         logger.info("Using deterministic quantitative decision model (TYPESAFE_API_KEY not configured or failed).")
-        return self._deterministic_decision(sym, price, change_24h, rsi, funding_rate, social_stats)
+        return self._deterministic_decision(
+            sym, price, change_24h, rsi, funding_rate, social_stats, has_perpetuals=has_perpetuals
+        )
 
     def _build_decision_output(
         self,
@@ -161,7 +170,7 @@ class TypeSafeService:
         sentiment_score: float,
         squeeze_prob: float,
         catalyst_score: float,
-        funding_rate: float,
+        funding_rate: Optional[float],
         rsi: float,
         change_24h: float,
         action_probabilities: Optional[Dict[str, float]] = None,
@@ -237,7 +246,10 @@ class TypeSafeService:
         # Build dynamic rationale
         reasons = []
         if squeeze_prob > 60:
-            reasons.append(f"Short squeeze probability is elevated ({squeeze_prob}%) due to negative funding ({funding_rate}%).")
+            if funding_rate is not None and funding_rate < 0:
+                reasons.append(f"Short squeeze probability is elevated ({squeeze_prob}%) due to negative perpetual funding ({funding_rate}%).")
+            else:
+                reasons.append(f"Capitulation reversal probability is elevated ({squeeze_prob}%) amidst extreme retail panic.")
         if rsi < 35:
             reasons.append(f"RSI-14 indicates oversold conditions ({rsi}).")
         elif rsi > 68:
@@ -285,14 +297,15 @@ class TypeSafeService:
         price: float,
         change_24h: float,
         rsi: float,
-        funding_rate: float,
-        social_stats: Dict[str, Any]
+        funding_rate: Optional[float],
+        social_stats: Dict[str, Any],
+        has_perpetuals: bool = False
     ) -> Dict[str, Any]:
         """Rule-based quantitative model fallback when TypeSafe API key is not yet set."""
         polarity = social_stats.get("polarity_score", 0.0)
 
-        # Logic for short squeeze
-        if funding_rate < -0.01 and polarity < -0.2:
+        # Logic for high-conviction setup: require real perpetual funding rate to be negative, OR extreme oversold divergence
+        if has_perpetuals and funding_rate is not None and funding_rate < -0.01 and polarity < -0.2:
             action = "STRONG_BUY"
             confidence = 88.5
             squeeze_prob = 84.0
@@ -306,7 +319,7 @@ class TypeSafeService:
             sentiment_text = "Cautious / Bearish"
             sentiment_score = 1.2
             catalyst_score = 1.0
-        elif rsi > 70 and funding_rate > 0.03:
+        elif rsi > 70 and has_perpetuals and funding_rate is not None and funding_rate > 0.03:
             action = "STRONG_SELL"
             confidence = 86.0
             squeeze_prob = 10.0

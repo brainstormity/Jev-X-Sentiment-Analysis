@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import logging
 import asyncio
+import re
 
 from app.core.config import settings
 from app.services.market_service import market_service
@@ -14,9 +15,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["Analysis"])
 
+KEY_REGEX = re.compile(r"^[A-Za-z0-9_\-\.]{8,128}$")
+SYMBOL_REGEX = re.compile(r"^[A-Z0-9]{1,15}$")
+
 
 class AnalyzeRequest(BaseModel):
-    symbol: str = Field(..., example="BTC", description="Crypto symbol (e.g. BTC, SOL, ETH)")
+    symbol: str = Field(..., json_schema_extra={"example": "BTC"}, description="Crypto symbol (e.g. BTC, SOL, ETH)")
     sample_size: int = Field(100, ge=50, le=1000, description="Tweet sample count: 50, 100, 250, 500, or 1000")
 
 
@@ -24,12 +28,18 @@ class AnalyzeRequest(BaseModel):
 async def analyze_asset(req: AnalyzeRequest) -> Dict[str, Any]:
     """
     On-demand market intelligence & decision generation.
-    1. Fetches live market data (CCXT Binance/Bybit).
+    1. Fetches live market data (CCXT Kraken / Kraken Futures).
     2. Ingests N tweets (TwitterAPI.io with pagination).
     3. Runs Tier 1 statistical aggregation & stratified sampling.
     4. Evaluates state with TypeSafe Jev System One.
     """
     sym = req.symbol.strip().upper().replace("$", "")
+    if not SYMBOL_REGEX.match(sym):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid crypto symbol '{req.symbol}'. Symbol must be 1-15 alphanumeric characters."
+        )
+
     sample_size = req.sample_size
 
     try:
@@ -62,6 +72,8 @@ async def analyze_asset(req: AnalyzeRequest) -> Dict[str, Any]:
             "is_typesafe_mock": decision.get("is_mock", False)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error analyzing {sym}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to analyze {sym}: {str(e)}")
@@ -71,6 +83,8 @@ async def analyze_asset(req: AnalyzeRequest) -> Dict[str, Any]:
 async def get_market_summary(symbol: str) -> Dict[str, Any]:
     """Quick market data lookup for an asset."""
     sym = symbol.strip().upper().replace("$", "")
+    if not SYMBOL_REGEX.match(sym):
+        raise HTTPException(status_code=400, detail=f"Invalid symbol '{symbol}'. Must be alphanumeric.")
     try:
         return await market_service.get_market_data(sym)
     except Exception as e:
@@ -91,10 +105,28 @@ async def get_settings_status() -> Dict[str, Any]:
 
 
 @router.post("/settings")
-async def update_settings(payload: SettingsUpdate) -> Dict[str, Any]:
+async def update_settings(
+    payload: SettingsUpdate,
+    request: Request,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")
+) -> Dict[str, Any]:
+    """
+    Update API keys with authentication and input sanitization.
+    Permits access from localhost or with a valid X-Admin-Token header.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    is_local = client_host in ("127.0.0.1", "::1", "localhost", "testclient")
+    has_valid_admin_token = bool(settings.ADMIN_TOKEN and x_admin_token == settings.ADMIN_TOKEN)
+
+    if not (is_local or has_valid_admin_token):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Settings modification is restricted to localhost or authenticated requests."
+        )
+
     from pathlib import Path
     env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
-    
+
     env_vars = {}
     if env_path.exists():
         for line in env_path.read_text().splitlines():
@@ -104,12 +136,16 @@ async def update_settings(payload: SettingsUpdate) -> Dict[str, Any]:
 
     if payload.typesafe_api_key is not None and payload.typesafe_api_key.strip():
         k = payload.typesafe_api_key.strip()
+        if not KEY_REGEX.match(k):
+            raise HTTPException(status_code=400, detail="Invalid TypeSafe API key format.")
         settings.TYPESAFE_API_KEY = k
         typesafe_service.api_key = k
         env_vars["TYPESAFE_API_KEY"] = k
 
     if payload.twitter_api_key is not None and payload.twitter_api_key.strip():
         k = payload.twitter_api_key.strip()
+        if not KEY_REGEX.match(k):
+            raise HTTPException(status_code=400, detail="Invalid TwitterAPI key format.")
         settings.TWITTER_API_KEY = k
         twitter_service.api_key = k
         env_vars["TWITTER_API_KEY"] = k

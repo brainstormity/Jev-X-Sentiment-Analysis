@@ -2,6 +2,9 @@ import httpx
 import logging
 from typing import List, Dict, Any, Optional
 import time
+import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from app.core.config import settings
 from app.core.cache import social_cache
@@ -10,6 +13,24 @@ from app.core.database import db
 logger = logging.getLogger(__name__)
 
 TWITTER_API_URL = "https://api.twitterapi.io/twitter/tweet/advanced_search"
+SYMBOL_REGEX = re.compile(r"^[A-Z0-9]{1,15}$")
+
+
+def parse_twitter_timestamp(ts_str: Optional[str]) -> int:
+    """Parse various Twitter date formats into unix integer seconds."""
+    if not ts_str:
+        return int(time.time())
+    try:
+        # ISO 8601 (e.g. 2026-09-22T04:00:00.000Z)
+        if ts_str.endswith("Z"):
+            return int(datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp())
+        elif "T" in ts_str:
+            return int(datetime.fromisoformat(ts_str).timestamp())
+        # RFC 2822 (e.g. Tue Sep 22 04:00:00 +0000 2026)
+        dt = parsedate_to_datetime(ts_str)
+        return int(dt.timestamp())
+    except Exception:
+        return int(time.time())
 
 
 class TwitterService:
@@ -17,7 +38,10 @@ class TwitterService:
         self.api_key = api_key or settings.TWITTER_API_KEY
 
     def _build_query(self, symbol: str) -> str:
-        sym = symbol.upper().replace("$", "")
+        sym = symbol.upper().replace("$", "").strip()
+        if not SYMBOL_REGEX.match(sym):
+            raise ValueError(f"Invalid symbol '{symbol}' for query builder. Must be 1-15 alphanumeric characters.")
+
         names = {
             "BTC": "Bitcoin",
             "SOL": "Solana",
@@ -47,7 +71,10 @@ class TwitterService:
         5. Fills the remaining required count directly from the local database so the user
            gets their full requested sample size at minimal API cost.
         """
-        sym = symbol.upper().replace("$", "")
+        sym = symbol.upper().replace("$", "").strip()
+        if not SYMBOL_REGEX.match(sym):
+            raise ValueError(f"Invalid crypto symbol '{symbol}'. Must be 1-15 alphanumeric characters.")
+
         cache_key = f"tweets_{sym}_{target_count}"
 
         # 1. Check in-memory short TTL cache (e.g. within 60s)
@@ -71,6 +98,7 @@ class TwitterService:
                     "is_mock": True,
                     "api_calls_made": 0,
                     "cost_saved": True,
+                    "yield_deficit": False,
                     "tweets": db_tweets
                 }
                 await social_cache.set(cache_key, result, ttl=30)
@@ -90,7 +118,8 @@ class TwitterService:
 
         early_stopped = False
         api_pages_called = 0
-        max_pages = max(1, (target_count + 39) // 40)
+        # Allow sufficient pages even if vendor returns fewer than 40 tweets per page
+        max_pages = min(35, max(5, (target_count // 15) + 3))
 
         async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT) as client:
             while len(new_tweets) < target_count and api_pages_called < max_pages:
@@ -124,10 +153,14 @@ class TwitterService:
                             break
 
                         author = t.get("author") or {}
+                        created_at_raw = t.get("createdAt") or t.get("created_at") or ""
+                        epoch_ts = parse_twitter_timestamp(created_at_raw)
+
                         normalized = {
                             "id": tid,
                             "text": t.get("text", ""),
-                            "created_at": t.get("createdAt") or t.get("created_at", ""),
+                            "created_at": created_at_raw,
+                            "timestamp_epoch": epoch_ts,
                             "likes": int(t.get("likeCount") or t.get("likes") or 0),
                             "retweets": int(t.get("retweetCount") or t.get("retweets") or 0),
                             "replies": int(t.get("replyCount") or t.get("replies") or 0),
@@ -166,6 +199,13 @@ class TwitterService:
                     if len(combined_tweets) >= target_count:
                         break
 
+        yield_deficit = len(combined_tweets) < target_count
+        if yield_deficit:
+            logger.warning(
+                f"Target count {target_count} requested for {sym}, but only {len(combined_tweets)} "
+                "available from live search and local database combined."
+            )
+
         result = {
             "symbol": sym,
             "count": len(combined_tweets),
@@ -173,6 +213,7 @@ class TwitterService:
             "target_count": target_count,
             "api_pages_called": api_pages_called,
             "early_stopped": early_stopped,
+            "yield_deficit": yield_deficit,
             "is_mock": False,
             "tweets": combined_tweets
         }

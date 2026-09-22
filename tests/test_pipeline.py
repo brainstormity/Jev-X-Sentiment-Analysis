@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import sys
 from pathlib import Path
@@ -12,17 +13,24 @@ from app.services.stats_service import stats_service
 from app.services.typesafe_service import typesafe_service
 
 
+@pytest.mark.asyncio
 async def test_pipeline():
     print("\n--- 1. Testing Market Service ---")
     market = await market_service.get_market_data("BTC")
     assert "price" in market, "Market data must contain price"
+    assert "is_fallback" in market, "Market data must contain is_fallback flag"
+    assert isinstance(market["is_fallback"], bool)
+    assert "has_perpetuals" in market
+    assert "momentum_bucket" in market
+    assert market["momentum_bucket"] in ["bullish", "bearish", "neutral"]
     assert market["price"] > 0, "Price must be positive"
-    print(f"✅ Market data fetched: {market['symbol']} Price=${market['price']} 24h={market['change_24h_pct']}% Funding={market['funding_rate_pct']}% Candles={len(market['candles'])}")
+    print(f"✅ Market data fetched: {market['symbol']} Price=${market['price']} 24h={market['change_24h_pct']}% Perpetuals={market['has_perpetuals']} Funding={market['funding_rate_pct']}%")
 
     print("\n--- 2. Testing Twitter Service ---")
     twitter_res = await twitter_service.fetch_tweets("BTC", target_count=50)
     tweets = twitter_res.get("tweets", [])
     assert len(tweets) > 0, "Tweets list should not be empty"
+    assert "timestamp_epoch" in tweets[0], "Tweets must contain timestamp_epoch"
     print(f"✅ Tweets fetched: {len(tweets)} tweets (is_mock={twitter_res.get('is_mock')})")
 
     print("\n--- 3. Testing Stats Pre-Processing ---")
@@ -37,7 +45,6 @@ async def test_pipeline():
     assert "trade_levels" in decision
     assert decision["confidence_pct"] > 0
     print(f"✅ Decision generated: Action={decision['action']} Confidence={decision['confidence_pct']}% SqueezeRisk={decision['squeeze_risk_pct']}%")
-    print(f"   Entry: {decision['trade_levels']['entry_range']} StopLoss: {decision['trade_levels']['stop_loss']} TP1: {decision['trade_levels']['target_1']}")
 
     print("\n--- 5. Testing FastAPI /api/v1/analyze Endpoint ---")
     transport = ASGITransport(app=app)
@@ -50,7 +57,30 @@ async def test_pipeline():
         assert "market" in data
         print(f"✅ API Endpoint responded 200 OK for SOL! Action: {data['decision']['action']} Price: ${data['market']['price']}")
 
-    print("\n🎉 ALL TESTS PASSED SUCCESSFULLY!")
+
+@pytest.mark.asyncio
+async def test_fallback_unlisted_symbol():
+    """Verify fallback data contract for unlisted symbols."""
+    fb = market_service._generate_fallback_data("ZZQQ")
+    assert fb["is_fallback"] is True
+    assert fb["has_perpetuals"] is False
+    assert fb["funding_rate_pct"] is None
+    assert fb["open_interest_usd"] is None
+    assert fb["momentum_bucket"] in ["bullish", "bearish", "neutral"]
+
+
+@pytest.mark.asyncio
+async def test_api_validation_and_security():
+    """Verify input validation and settings endpoint security."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Invalid symbol rejected with 400
+        res = await client.post("/api/v1/analyze", json={"symbol": "INVALID!$$", "sample_size": 100})
+        assert res.status_code == 400
+
+        # Invalid key format rejected with 400
+        res_settings = await client.post("/api/v1/settings", json={"typesafe_api_key": "bad key spaces"})
+        assert res_settings.status_code == 400
 
 
 if __name__ == "__main__":

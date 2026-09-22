@@ -326,7 +326,7 @@ body {
 /* Ticker Ribbon */
 .ticker-ribbon {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
@@ -703,7 +703,7 @@ body {
 }
 
 .val-unavailable {
-    color: var(--text-muted);
+    color: var(--text-muted) !important;
 }
 
 .copy-btn {
@@ -1097,4 +1097,19 @@ body {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
 }
+
+.terminal-footer {
+    text-align: center;
+    padding: 24px 10px 10px 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: 30px;
+    line-height: 1.6;
+}
+
+.terminal-footer strong {
+    color: var(--text-secondary);
+}
+
 

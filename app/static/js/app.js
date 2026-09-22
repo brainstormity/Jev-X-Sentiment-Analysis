@@ -224,11 +224,25 @@ function updateUI(data) {
         : `ticker-val font-mono ${change >= 0 ? 'text-success' : 'text-danger'}`;
 
     const fundingEl = document.getElementById("ticker-funding");
-    const funding = market.funding_rate_pct || 0;
-    fundingEl.textContent = isFallback ? "—" : `${funding > 0 ? '+' : ''}${funding}%`;
-    fundingEl.className = isFallback
-        ? "ticker-val font-mono val-unavailable"
-        : `ticker-val font-mono ${funding < 0 ? 'text-success' : funding > 0.03 ? 'text-danger' : ''}`;
+    if (isFallback || market.funding_rate_pct === null || market.funding_rate_pct === undefined) {
+        fundingEl.textContent = "—";
+        fundingEl.className = "ticker-val font-mono val-unavailable";
+    } else {
+        const funding = market.funding_rate_pct;
+        fundingEl.textContent = `${funding > 0 ? '+' : ''}${funding.toFixed(4)}%`;
+        fundingEl.className = `ticker-val font-mono ${funding < 0 ? 'text-success' : funding > 0.03 ? 'text-danger' : ''}`;
+    }
+
+    const oiEl = document.getElementById("ticker-oi");
+    if (oiEl) {
+        if (isFallback || !market.open_interest_usd) {
+            oiEl.textContent = "—";
+            oiEl.classList.toggle("val-unavailable", true);
+        } else {
+            oiEl.textContent = `$${(market.open_interest_usd / 1e6).toFixed(1)}M`;
+            oiEl.classList.toggle("val-unavailable", false);
+        }
+    }
 
     const rsiEl = document.getElementById("ticker-rsi");
     rsiEl.textContent = isFallback ? "—" : (market.rsi_14 || "--");

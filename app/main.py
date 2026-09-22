@@ -15,11 +15,14 @@ app = FastAPI(
     description="On-demand crypto market intelligence and decision terminal powered by TypeSafe Jev System One."
 )
 
-# CORS
+# CORS Configuration
+allowed_origins_raw = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+allow_credentials = "*" not in allowed_origins_raw
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins_raw,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

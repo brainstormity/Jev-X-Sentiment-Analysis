@@ -110,11 +110,11 @@ class Database:
             try:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT id, text, created_at, likes, retweets, replies,
+                    SELECT id, text, created_at, timestamp_epoch, likes, retweets, replies,
                            author_username, author_followers, author_verified
                     FROM tweets
                     WHERE symbol = ?
-                    ORDER BY fetched_at DESC, id DESC
+                    ORDER BY timestamp_epoch DESC, fetched_at DESC, id DESC
                     LIMIT ?
                 """, (symbol.upper(), limit))
                 rows = cursor.fetchall()
@@ -124,6 +124,7 @@ class Database:
                         "id": r["id"],
                         "text": r["text"],
                         "created_at": r["created_at"],
+                        "timestamp_epoch": r["timestamp_epoch"],
                         "likes": r["likes"],
                         "retweets": r["retweets"],
                         "replies": r["replies"],

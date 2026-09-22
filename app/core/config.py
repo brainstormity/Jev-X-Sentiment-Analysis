@@ -22,5 +22,9 @@ class Settings(BaseSettings):
     DEFAULT_EXCHANGE: str = "binance"
     REQUEST_TIMEOUT: float = 20.0
 
+    # Security
+    ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000,http://localhost:8787,http://127.0.0.1:8787"
+    ADMIN_TOKEN: Optional[str] = None
+
 
 settings = Settings()
