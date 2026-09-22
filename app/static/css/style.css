@@ -684,6 +684,28 @@ body {
     color: var(--text-secondary);
 }
 
+.fallback-banner {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.fallback-banner strong {
+    color: var(--accent-amber);
+}
+
+.fallback-banner[hidden] {
+    display: none;
+}
+
+.val-unavailable {
+    color: var(--text-muted);
+}
+
 .copy-btn {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid var(--border-subtle);
@@ -695,8 +717,13 @@ body {
     transition: all 0.15s ease;
 }
 
-.copy-btn:hover {
+.copy-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.12);
+}
+
+.copy-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .levels-grid {

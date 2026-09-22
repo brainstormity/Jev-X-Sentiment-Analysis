@@ -1,6 +1,9 @@
 // Jev X Sentiment Analysis Terminal Client Controller
 
 let currentDecision = null;
+// Set from the last response's market block: true when Kraken failed and the
+// prices in it are placeholder constants rather than quotes.
+let currentPriceIsFallback = false;
 
 // Cost lookup per sample size
 const COST_MAP = {
@@ -58,6 +61,12 @@ function setupEventListeners() {
     // Copy Levels button
     copyBtn.addEventListener("click", () => {
         if (!currentDecision) return;
+        if (currentPriceIsFallback) {
+            const orig = copyBtn.textContent;
+            copyBtn.textContent = "No live price";
+            setTimeout(() => { copyBtn.textContent = orig; }, 2000);
+            return;
+        }
         const d = currentDecision;
         const lvls = d.trade_levels;
         const text = [
@@ -196,21 +205,38 @@ function updateUI(data) {
     currentDecision = decision;
 
     // 1. Ticker Ribbon
+    // Kraken failed for this symbol and market_service returned placeholder
+    // constants. The response says so; the interface has to say so too, and it
+    // must not turn a placeholder into entry, stop and target prices.
+    const isFallback = market.is_fallback === true;
+    currentPriceIsFallback = isFallback;
+
     document.getElementById("ticker-symbol").textContent = `${data.symbol}/USDT`;
-    document.getElementById("ticker-price").textContent = `$${(market.price || 0).toLocaleString()}`;
+    const priceEl = document.getElementById("ticker-price");
+    priceEl.textContent = isFallback ? "unavailable" : `$${(market.price || 0).toLocaleString()}`;
+    priceEl.classList.toggle("val-unavailable", isFallback);
 
     const changeEl = document.getElementById("ticker-change");
     const change = market.change_24h_pct || 0;
-    changeEl.textContent = `${change > 0 ? '+' : ''}${change}%`;
-    changeEl.className = `ticker-val font-mono ${change >= 0 ? 'text-success' : 'text-danger'}`;
+    changeEl.textContent = isFallback ? "—" : `${change > 0 ? '+' : ''}${change}%`;
+    changeEl.className = isFallback
+        ? "ticker-val font-mono val-unavailable"
+        : `ticker-val font-mono ${change >= 0 ? 'text-success' : 'text-danger'}`;
 
     const fundingEl = document.getElementById("ticker-funding");
     const funding = market.funding_rate_pct || 0;
-    fundingEl.textContent = `${funding > 0 ? '+' : ''}${funding}%`;
-    fundingEl.className = `ticker-val font-mono ${funding < 0 ? 'text-success' : funding > 0.03 ? 'text-danger' : ''}`;
+    fundingEl.textContent = isFallback ? "—" : `${funding > 0 ? '+' : ''}${funding}%`;
+    fundingEl.className = isFallback
+        ? "ticker-val font-mono val-unavailable"
+        : `ticker-val font-mono ${funding < 0 ? 'text-success' : funding > 0.03 ? 'text-danger' : ''}`;
 
-    document.getElementById("ticker-rsi").textContent = market.rsi_14 || "--";
-    document.getElementById("ticker-vol").textContent = `$${((market.volume_24h_usd || 0) / 1e6).toFixed(1)}M`;
+    const rsiEl = document.getElementById("ticker-rsi");
+    rsiEl.textContent = isFallback ? "—" : (market.rsi_14 || "--");
+    rsiEl.classList.toggle("val-unavailable", isFallback);
+
+    const volEl = document.getElementById("ticker-vol");
+    volEl.textContent = isFallback ? "—" : `$${((market.volume_24h_usd || 0) / 1e6).toFixed(1)}M`;
+    volEl.classList.toggle("val-unavailable", isFallback);
 
     // 2. Decision Hero
     const badge = document.getElementById("action-badge");
@@ -232,13 +258,27 @@ function updateUI(data) {
     renderProbabilityDistribution(decision);
 
     // 3. Trade Levels
-    const lvls = decision.trade_levels || {};
-    const entry = lvls.entry_range || [market.price, market.price];
-    document.getElementById("lvl-entry").textContent = `$${entry[0].toLocaleString()} - $${entry[1].toLocaleString()}`;
-    document.getElementById("lvl-sl").textContent = `$${(lvls.stop_loss || 0).toLocaleString()} (${lvls.stop_loss_pct || 0}%)`;
-    document.getElementById("lvl-tp1").textContent = `$${(lvls.target_1 || 0).toLocaleString()} (+${lvls.target_1_pct || 0}%)`;
-    document.getElementById("lvl-tp2").textContent = `$${(lvls.target_2 || 0).toLocaleString()} (+${lvls.target_2_pct || 0}%)`;
-    document.getElementById("lvl-rr").textContent = `${lvls.risk_reward_ratio || 2.0}:1 Expected R:R`;
+    const banner = document.getElementById("market-fallback-banner");
+    if (banner) banner.hidden = !isFallback;
+    const copyBtn = document.getElementById("copy-levels-btn");
+    if (copyBtn) copyBtn.disabled = isFallback;
+    const levelCells = ["lvl-entry", "lvl-sl", "lvl-tp1", "lvl-tp2", "lvl-rr"];
+    if (isFallback) {
+        for (const id of levelCells) {
+            const el = document.getElementById(id);
+            el.textContent = "—";
+            el.classList.add("val-unavailable");
+        }
+    } else {
+        for (const id of levelCells) document.getElementById(id).classList.remove("val-unavailable");
+        const lvls = decision.trade_levels || {};
+        const entry = lvls.entry_range || [market.price, market.price];
+        document.getElementById("lvl-entry").textContent = `$${entry[0].toLocaleString()} - $${entry[1].toLocaleString()}`;
+        document.getElementById("lvl-sl").textContent = `$${(lvls.stop_loss || 0).toLocaleString()} (${lvls.stop_loss_pct || 0}%)`;
+        document.getElementById("lvl-tp1").textContent = `$${(lvls.target_1 || 0).toLocaleString()} (+${lvls.target_1_pct || 0}%)`;
+        document.getElementById("lvl-tp2").textContent = `$${(lvls.target_2 || 0).toLocaleString()} (+${lvls.target_2_pct || 0}%)`;
+        document.getElementById("lvl-rr").textContent = `${lvls.risk_reward_ratio || 2.0}:1 Expected R:R`;
+    }
 
     // 4. Metrics Radar
     document.getElementById("sentiment-label-val").textContent = stats.sentiment_label || decision.sentiment_label || "Neutral";
