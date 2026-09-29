@@ -12,7 +12,7 @@ The platform does not execute trades automatically. It generates a clear decisio
 
 ## How Tweets Are Analyzed
 
-When you request sentiment analysis across 100 to 1,000 tweets, dumping hundreds of raw tweets into an LLM would exceed token budgets and introduce latency. Instead, Jev X Sentiment Analysis uses an **intelligent two-tier pipeline**:
+When you request sentiment analysis across 50 to 1,000 tweets, dumping hundreds of raw tweets into an LLM would exceed token budgets and introduce latency. Instead, Jev X Sentiment Analysis uses an **intelligent three-stage pipeline**:
 
 ```text
 User Search (e.g. "SOL", 500 tweets)
@@ -50,7 +50,6 @@ User Search (e.g. "SOL", 500 tweets)
    - Recommended action with calibrated confidence percentage
    - Macro sentiment gauge across all 500 tweets
    - Calculated entry range, stop loss, and target levels
-   - Interactive TradingView candlestick chart
    - User executes manually on their exchange of choice
 ```
 
@@ -79,26 +78,24 @@ You can configure the tweet sample size in the terminal interface based on your 
 ├── app/
 │   ├── api/
 │   │   └── v1/
-│   │       ├── analyze.py        # Search endpoint: runs ingestion, stats, and decision
-│   │       ├── market.py         # CCXT market price & funding rate helpers
-│   │       └── social.py         # TwitterAPI.io paginated search & caching
+│   │       └── analyze.py        # Search and settings endpoints
 │   ├── core/
 │   │   ├── config.py             # App configuration and environment variables
-│   │   └── cache.py              # In-memory / local cache for 10-minute tweet deduplication
+│   │   ├── cache.py              # In-memory TTL caches
+│   │   └── database.py           # Local SQLite tweet storage and retrieval
 │   ├── services/
-│   │   ├── market_service.py     # Exchange data client (CCXT Binance/Bybit)
-│   │   ├── twitter_service.py    # TwitterAPI.io client with cursor pagination (up to 1,000 tweets)
+│   │   ├── market_service.py     # Exchange data client (CCXT Kraken/Kraken Futures)
+│   │   ├── twitter_service.py    # TwitterAPI.io client with cursor pagination
 │   │   ├── stats_service.py      # Tier 1 deterministic statistical pre-processing
-│   │   └── typesafe_service.py   # TypeSafe Jev System One client & question definitions
+│   │   └── typesafe_service.py   # TypeSafe Jev System One client and decision logic
 │   ├── static/
 │   │   ├── css/
 │   │   │   └── style.css         # Dark quantitative terminal styling
 │   │   └── js/
-│   │       └── app.js            # Frontend logic, sample-size slider, TradingView chart
+│   │       └── app.js            # Frontend controls and result rendering
 │   ├── templates/
 │   │   └── index.html            # Main web terminal interface
 │   └── main.py                   # FastAPI application entrypoint
-├── ai_market_intelligence_requirements.md
 ├── requirements.txt
 └── README.md
 ```
@@ -116,7 +113,7 @@ You can configure the tweet sample size in the terminal interface based on your 
 
 ```bash
 git clone <repo-url>
-cd "Jev AI Market Analysis"
+cd Jev-X-Sentiment-Analysis
 
 python -m venv venv
 source venv/bin/activate
